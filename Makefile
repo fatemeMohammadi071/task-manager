@@ -27,4 +27,7 @@ mock:
 test:
 	go test -v -cover ./...
 
-.PHONY: up down psql new_migration migrateup migratedown sqlc mock test
+server:
+	go run ./cmd/server
+
+.PHONY: up down psql new_migration migrateup migratedown sqlc mock test server
