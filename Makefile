@@ -18,4 +18,7 @@ migrateup:
 migratedown:
 	migrate -path internal/db/migration -database "$(DB_URL)" -verbose down -all
 
-.PHONY: up down psql new_migration migrateup migratedown
+sqlc:
+	sqlc generate
+
+.PHONY: up down psql new_migration migrateup migratedown sqlc
