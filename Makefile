@@ -21,4 +21,7 @@ migratedown:
 sqlc:
 	sqlc generate
 
-.PHONY: up down psql new_migration migrateup migratedown sqlc
+mock:
+	mockgen -package mockdb -destination internal/db/mock/store.go $(shell go list -m)/internal/db/sqlc Store
+
+.PHONY: up down psql new_migration migrateup migratedown sqlc mock
