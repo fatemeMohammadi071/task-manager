@@ -1,0 +1,15 @@
+cat > .gitignore << 'EOF'
+# binaries
+/bin/
+main
+
+# env / local
+app.env
+*.out
+coverage.html
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+EOF
