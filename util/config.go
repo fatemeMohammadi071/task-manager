@@ -13,6 +13,7 @@ type Config struct {
 	DBSource          string `mapstructure:"DB_SOURCE"`
 	HTTPServerAddress string `mapstructure:"HTTP_SERVER_ADDRESS"`
 	RedisAddress      string `mapstructure:"REDIS_ADDRESS"`
+	TracingEndpoint   string `mapstructure:"TRACING_ENDPOINT"`
 }
 
 // LoadConfig reads configuration from app.env in the given path.
@@ -28,6 +29,7 @@ func LoadConfig(path string) (Config, error) {
 	v.SetDefault("DB_SOURCE", "")
 	v.SetDefault("HTTP_SERVER_ADDRESS", "0.0.0.0:8080")
 	v.SetDefault("REDIS_ADDRESS", "localhost:6379")
+	v.SetDefault("TRACING_ENDPOINT", "") // empty = tracing disabled
 
 	v.AutomaticEnv()
 
