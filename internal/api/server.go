@@ -35,8 +35,8 @@ func (server *Server) setupRouter() {
 	v1 := router.Group("/api/v1")
 	{
 		v1.POST("/tasks", server.createTask)
+		v1.GET("/tasks", server.listTasks)
 		v1.GET("/tasks/:id", server.getTask)
-
 	}
 
 	server.router = router
