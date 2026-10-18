@@ -37,6 +37,8 @@ func (server *Server) setupRouter() {
 		v1.POST("/tasks", server.createTask)
 		v1.GET("/tasks", server.listTasks)
 		v1.GET("/tasks/:id", server.getTask)
+		v1.PATCH("/tasks/:id", server.updateTask)
+		v1.DELETE("/tasks/:id", server.deleteTask)
 	}
 
 	server.router = router

@@ -159,3 +159,72 @@ func (server *Server) listTasks(ctx *gin.Context) {
 		PageSize: req.PageSize,
 	})
 }
+
+type updateTaskRequest struct {
+	// pointers: nil = "not sent" = keep the old value (COALESCE in SQL)
+	Title       *string `json:"title" binding:"omitempty,min=1,max=255"`
+	Description *string `json:"description" binding:"omitempty,max=5000"`
+	Status      *string `json:"status" binding:"omitempty,oneof=todo in_progress done"`
+	Assignee    *string `json:"assignee" binding:"omitempty,max=100"`
+}
+
+func (server *Server) updateTask(ctx *gin.Context) {
+	id, ok := bindTaskID(ctx)
+	if !ok {
+		return
+	}
+
+	var req updateTaskRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	if req.Title == nil && req.Description == nil && req.Status == nil && req.Assignee == nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "at least one field must be provided"})
+		return
+	}
+
+	var status *db.TaskStatus
+	if req.Status != nil {
+		s := db.TaskStatus(*req.Status)
+		status = &s
+	}
+
+	task, err := server.store.UpdateTask(ctx, db.UpdateTaskParams{
+		ID:          id,
+		Title:       req.Title,
+		Description: req.Description,
+		Status:      status,
+		Assignee:    req.Assignee,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+			return
+		}
+		server.internalError(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, task)
+}
+
+func (server *Server) deleteTask(ctx *gin.Context) {
+	id, ok := bindTaskID(ctx)
+	if !ok {
+		return
+	}
+
+	rows, err := server.store.DeleteTask(ctx, id)
+	if err != nil {
+		server.internalError(ctx, err)
+		return
+	}
+	if rows == 0 {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+		return
+	}
+
+	ctx.Status(http.StatusNoContent)
+}
