@@ -1,10 +1,12 @@
 package api
 
 import (
+	"errors"
 	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 
 	db "github.com/fatemeMohammadi071/task-manager/internal/db/sqlc"
 )
@@ -42,6 +44,31 @@ func (server *Server) createTask(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusCreated, task)
+}
+
+// taskIDRequest is shared by GET, PATCH and DELETE /tasks/:id
+type taskIDRequest struct {
+	ID int64 `uri:"id" binding:"required,min=1"`
+}
+
+func (server *Server) getTask(ctx *gin.Context) {
+	var req taskIDRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	task, err := server.store.GetTask(ctx, req.ID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+			return
+		}
+		server.internalError(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, task)
 }
 
 // internalError logs the real error and returns a generic message,

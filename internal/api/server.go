@@ -32,9 +32,11 @@ func (server *Server) setupRouter() {
 
 	router.GET("/health", server.health)
 
-		v1 := router.Group("/api/v1")
+	v1 := router.Group("/api/v1")
 	{
 		v1.POST("/tasks", server.createTask)
+		v1.GET("/tasks/:id", server.getTask)
+
 	}
 
 	server.router = router
