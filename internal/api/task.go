@@ -51,14 +51,23 @@ type taskIDRequest struct {
 	ID int64 `uri:"id" binding:"required,min=1"`
 }
 
-func (server *Server) getTask(ctx *gin.Context) {
+// bindTaskID reads :id from the URL. On failure it writes a 400 and returns false.
+func bindTaskID(ctx *gin.Context) (int64, bool) {
 	var req taskIDRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "id must be a positive integer"})
+		return 0, false
+	}
+	return req.ID, true
+}
+
+func (server *Server) getTask(ctx *gin.Context) {
+	id, ok := bindTaskID(ctx)
+	if !ok {
 		return
 	}
 
-	task, err := server.store.GetTask(ctx, req.ID)
+	task, err := server.store.GetTask(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
