@@ -28,7 +28,10 @@ func NewServer(config util.Config, store db.Store) *Server {
 
 func (server *Server) setupRouter() {
 	router := gin.New()
-	router.Use(gin.Logger(), gin.Recovery())
+	router.Use(
+		gin.LoggerWithConfig(gin.LoggerConfig{SkipPaths: []string{"/health", "/metrics"}}),
+		gin.Recovery(),
+	)
 
 	router.GET("/health", server.health)
 
