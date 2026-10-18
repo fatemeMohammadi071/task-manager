@@ -273,3 +273,161 @@ func TestGetTaskAPI(t *testing.T) {
 		})
 	}
 }
+
+// ---------- GET /api/v1/tasks ----------
+
+type listResponse struct {
+	Data     []db.Task `json:"data"`
+	Total    int64     `json:"total"`
+	PageID   int32     `json:"page_id"`
+	PageSize int32     `json:"page_size"`
+}
+
+func requireBodyMatchList(t *testing.T, body *bytes.Buffer, want listResponse) {
+	t.Helper()
+	var got listResponse
+	require.NoError(t, json.Unmarshal(body.Bytes(), &got))
+	require.Equal(t, want, got)
+}
+
+func TestListTasksAPI(t *testing.T) {
+	tasks := []db.Task{randomTask(), randomTask(), randomTask()}
+
+	done := db.TaskStatusDone
+	assignee := "ali"
+
+	testCases := []struct {
+		name          string
+		query         string
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:  "OKDefaults",
+			query: "",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListTasks(gomock.Any(), gomock.Eq(db.ListTasksParams{Limit: 10, Offset: 0})).
+					Times(1).
+					Return(tasks, nil)
+				store.EXPECT().
+					CountTasks(gomock.Any(), gomock.Eq(db.CountTasksParams{})).
+					Times(1).
+					Return(int64(3), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				requireBodyMatchList(t, recorder.Body, listResponse{
+					Data: tasks, Total: 3, PageID: 1, PageSize: 10,
+				})
+			},
+		},
+		{
+			name:  "OKWithFiltersAndPage2",
+			query: "?status=done&assignee=ali&page_id=2&page_size=5",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListTasks(gomock.Any(), gomock.Eq(db.ListTasksParams{
+						Status: &done, Assignee: &assignee, Limit: 5, Offset: 5,
+					})).
+					Times(1).
+					Return(tasks[:1], nil)
+				store.EXPECT().
+					CountTasks(gomock.Any(), gomock.Eq(db.CountTasksParams{
+						Status: &done, Assignee: &assignee,
+					})).
+					Times(1).
+					Return(int64(6), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				requireBodyMatchList(t, recorder.Body, listResponse{
+					Data: tasks[:1], Total: 6, PageID: 2, PageSize: 5,
+				})
+			},
+		},
+		{
+			name:  "InvalidStatus",
+			query: "?status=blocked",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().ListTasks(gomock.Any(), gomock.Any()).Times(0)
+				store.EXPECT().CountTasks(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:  "PageSizeTooLarge",
+			query: "?page_size=101",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().ListTasks(gomock.Any(), gomock.Any()).Times(0)
+				store.EXPECT().CountTasks(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:  "NegativePageID",
+			query: "?page_id=-1",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().ListTasks(gomock.Any(), gomock.Any()).Times(0)
+				store.EXPECT().CountTasks(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:  "ListError",
+			query: "",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListTasks(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(nil, errors.New("connection refused"))
+				store.EXPECT().CountTasks(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				requireErrorBody(t, recorder.Body, "internal server error")
+			},
+		},
+		{
+			name:  "CountError",
+			query: "",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListTasks(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(tasks, nil)
+				store.EXPECT().
+					CountTasks(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(0), errors.New("connection refused"))
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				requireErrorBody(t, recorder.Body, "internal server error")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			req, err := http.NewRequest(http.MethodGet, "/api/v1/tasks"+tc.query, nil)
+			require.NoError(t, err)
+
+			server.router.ServeHTTP(recorder, req)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
