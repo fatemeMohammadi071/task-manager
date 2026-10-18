@@ -4,7 +4,7 @@ cat > .gitignore << 'EOF'
 main
 
 # env / local
-app.env
+#app.env
 *.out
 coverage.html
 
