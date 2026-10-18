@@ -7,6 +7,11 @@ import (
 
 	db "github.com/fatemeMohammadi071/task-manager/internal/db/sqlc"
 	"github.com/fatemeMohammadi071/task-manager/util"
+
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
+	_ "github.com/fatemeMohammadi071/task-manager/docs"
 )
 
 // Server serves HTTP requests for the task manager service.
@@ -34,6 +39,7 @@ func (server *Server) setupRouter() {
 	)
 
 	router.GET("/health", server.health)
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	v1 := router.Group("/api/v1")
 	{
@@ -52,10 +58,22 @@ func (server *Server) Router() http.Handler {
 	return server.router
 }
 
+// health godoc
+//
+//	@Summary	Health check
+//	@Tags		health
+//	@Produce	json
+//	@Success	200	{object}	map[string]string
+//	@Router		/health [get]
 func (server *Server) health(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
 func errorResponse(err error) gin.H {
 	return gin.H{"error": err.Error()}
+}
+
+// errorBody is the JSON shape of every error response.
+type errorBody struct {
+	Error string `json:"error" example:"task not found"`
 }

@@ -1,0 +1,287 @@
+basePath: /
+definitions:
+  api.createTaskRequest:
+    properties:
+      assignee:
+        example: fateme
+        maxLength: 100
+        type: string
+      description:
+        example: setup + curl examples
+        maxLength: 5000
+        type: string
+      status:
+        enum:
+        - todo
+        - in_progress
+        - done
+        example: todo
+        type: string
+      title:
+        example: Write README
+        maxLength: 255
+        type: string
+    required:
+    - title
+    type: object
+  api.errorBody:
+    properties:
+      error:
+        example: task not found
+        type: string
+    type: object
+  api.listTasksResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/db.Task'
+        type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  api.updateTaskRequest:
+    properties:
+      assignee:
+        maxLength: 100
+        type: string
+      description:
+        maxLength: 5000
+        type: string
+      status:
+        enum:
+        - todo
+        - in_progress
+        - done
+        type: string
+      title:
+        description: 'pointers: nil = "not sent" = keep the old value (COALESCE in
+          SQL)'
+        maxLength: 255
+        minLength: 1
+        type: string
+    type: object
+  db.Task:
+    properties:
+      assignee:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      status:
+        $ref: '#/definitions/db.TaskStatus'
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  db.TaskStatus:
+    enum:
+    - todo
+    - in_progress
+    - done
+    type: string
+    x-enum-varnames:
+    - TaskStatusTodo
+    - TaskStatusInProgress
+    - TaskStatusDone
+host: localhost:8080
+info:
+  contact: {}
+  description: A small REST service for managing to-do tasks (CRUD, pagination, filtering).
+  title: Task Manager API
+  version: "1.0"
+paths:
+  /api/v1/tasks:
+    get:
+      description: Paginated list with optional filters. Response includes total count.
+      parameters:
+      - description: Page number (default 1)
+        in: query
+        minimum: 1
+        name: page_id
+        type: integer
+      - description: Page size (default 10, max 100)
+        in: query
+        maximum: 100
+        minimum: 1
+        name: page_size
+        type: integer
+      - description: Filter by status
+        enum:
+        - todo
+        - in_progress
+        - done
+        in: query
+        name: status
+        type: string
+      - description: Filter by assignee
+        in: query
+        name: assignee
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.listTasksResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.errorBody'
+      summary: List tasks
+      tags:
+      - tasks
+    post:
+      consumes:
+      - application/json
+      description: Creates a new task. If status is omitted it defaults to "todo".
+      parameters:
+      - description: Task to create
+        in: body
+        name: task
+        required: true
+        schema:
+          $ref: '#/definitions/api.createTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/db.Task'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.errorBody'
+      summary: Create a task
+      tags:
+      - tasks
+  /api/v1/tasks/{id}:
+    delete:
+      parameters:
+      - description: Task ID
+        in: path
+        minimum: 1
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.errorBody'
+      summary: Delete a task
+      tags:
+      - tasks
+    get:
+      parameters:
+      - description: Task ID
+        in: path
+        minimum: 1
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/db.Task'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.errorBody'
+      summary: Get a task by ID
+      tags:
+      - tasks
+    patch:
+      consumes:
+      - application/json
+      description: Only the fields sent are changed. At least one field is required.
+      parameters:
+      - description: Task ID
+        in: path
+        minimum: 1
+        name: id
+        required: true
+        type: integer
+      - description: Fields to update
+        in: body
+        name: task
+        required: true
+        schema:
+          $ref: '#/definitions/api.updateTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/db.Task'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.errorBody'
+      summary: Partially update a task
+      tags:
+      - tasks
+  /health:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Health check
+      tags:
+      - health
+schemes:
+- http
+swagger: "2.0"

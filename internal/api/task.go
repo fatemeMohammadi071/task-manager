@@ -12,12 +12,24 @@ import (
 )
 
 type createTaskRequest struct {
-	Title       string  `json:"title" binding:"required,max=255"`
-	Description string  `json:"description" binding:"max=5000"`
-	Status      string  `json:"status" binding:"omitempty,oneof=todo in_progress done"`
-	Assignee    *string `json:"assignee" binding:"omitempty,max=100"`
+	Title       string  `json:"title" binding:"required,max=255" example:"Write README"`
+	Description string  `json:"description" binding:"max=5000" example:"setup + curl examples"`
+	Status      string  `json:"status" binding:"omitempty,oneof=todo in_progress done" example:"todo" enums:"todo,in_progress,done"`
+	Assignee    *string `json:"assignee" binding:"omitempty,max=100" example:"fateme"`
 }
 
+// createTask godoc
+//
+//	@Summary		Create a task
+//	@Description	Creates a new task. If status is omitted it defaults to "todo".
+//	@Tags			tasks
+//	@Accept			json
+//	@Produce		json
+//	@Param			task	body		createTaskRequest	true	"Task to create"
+//	@Success		201		{object}	db.Task
+//	@Failure		400		{object}	errorBody
+//	@Failure		500		{object}	errorBody
+//	@Router			/api/v1/tasks [post]
 func (server *Server) createTask(ctx *gin.Context) {
 	var req createTaskRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -61,6 +73,17 @@ func bindTaskID(ctx *gin.Context) (int64, bool) {
 	return req.ID, true
 }
 
+// getTask godoc
+//
+//	@Summary	Get a task by ID
+//	@Tags		tasks
+//	@Produce	json
+//	@Param		id	path		int	true	"Task ID"	minimum(1)
+//	@Success	200	{object}	db.Task
+//	@Failure	400	{object}	errorBody
+//	@Failure	404	{object}	errorBody
+//	@Failure	500	{object}	errorBody
+//	@Router		/api/v1/tasks/{id} [get]
 func (server *Server) getTask(ctx *gin.Context) {
 	id, ok := bindTaskID(ctx)
 	if !ok {
@@ -107,6 +130,20 @@ type listTasksResponse struct {
 	PageSize int32     `json:"page_size"`
 }
 
+// listTasks godoc
+//
+//	@Summary		List tasks
+//	@Description	Paginated list with optional filters. Response includes total count.
+//	@Tags			tasks
+//	@Produce		json
+//	@Param			page_id		query		int		false	"Page number (default 1)"			minimum(1)
+//	@Param			page_size	query		int		false	"Page size (default 10, max 100)"	minimum(1)	maximum(100)
+//	@Param			status		query		string	false	"Filter by status"					Enums(todo, in_progress, done)
+//	@Param			assignee	query		string	false	"Filter by assignee"
+//	@Success		200			{object}	listTasksResponse
+//	@Failure		400			{object}	errorBody
+//	@Failure		500			{object}	errorBody
+//	@Router			/api/v1/tasks [get]
 func (server *Server) listTasks(ctx *gin.Context) {
 	var req listTasksRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
@@ -168,6 +205,20 @@ type updateTaskRequest struct {
 	Assignee    *string `json:"assignee" binding:"omitempty,max=100"`
 }
 
+// updateTask godoc
+//
+//	@Summary		Partially update a task
+//	@Description	Only the fields sent are changed. At least one field is required.
+//	@Tags			tasks
+//	@Accept			json
+//	@Produce		json
+//	@Param			id		path		int					true	"Task ID"	minimum(1)
+//	@Param			task	body		updateTaskRequest	true	"Fields to update"
+//	@Success		200		{object}	db.Task
+//	@Failure		400		{object}	errorBody
+//	@Failure		404		{object}	errorBody
+//	@Failure		500		{object}	errorBody
+//	@Router			/api/v1/tasks/{id} [patch]
 func (server *Server) updateTask(ctx *gin.Context) {
 	id, ok := bindTaskID(ctx)
 	if !ok {
@@ -210,6 +261,16 @@ func (server *Server) updateTask(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, task)
 }
 
+// deleteTask godoc
+//
+//	@Summary	Delete a task
+//	@Tags		tasks
+//	@Param		id	path	int	true	"Task ID"	minimum(1)
+//	@Success	204	"No Content"
+//	@Failure	400	{object}	errorBody
+//	@Failure	404	{object}	errorBody
+//	@Failure	500	{object}	errorBody
+//	@Router		/api/v1/tasks/{id} [delete]
 func (server *Server) deleteTask(ctx *gin.Context) {
 	id, ok := bindTaskID(ctx)
 	if !ok {

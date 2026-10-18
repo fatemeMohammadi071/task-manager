@@ -26,3 +26,17 @@ func TestHealth(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.JSONEq(t, `{"status":"ok"}`, recorder.Body.String())
 }
+
+func TestSwaggerUI(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	server := newTestServer(t, mockdb.NewMockStore(ctrl))
+
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodGet, "/swagger/doc.json", nil)
+	require.NoError(t, err)
+
+	server.Router().ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "Task Manager API")
+}

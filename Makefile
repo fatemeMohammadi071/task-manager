@@ -1,7 +1,7 @@
 DB_URL=postgresql://root:secret@localhost:5432/task_manager?sslmode=disable
 
 # all packages except generated mocks, comma-separated (for -coverpkg)
-COVER_PKGS=$(shell go list ./... | grep -v /mock | paste -sd, -)
+COVER_PKGS=$(shell go list ./... | grep -v -e /mock -e /docs | paste -sd, -)
 
 up:
 	docker compose up -d postgres
@@ -52,4 +52,8 @@ compose-down:
 compose-logs:
 	docker compose logs -f api
 
-.PHONY: up down psql new_migration migrateup migratedown sqlc mock test cover cover-check server compose-up compose-down compose-logs
+swagger:
+	swag fmt
+	swag init -g cmd/server/main.go -o docs --parseInternal
+
+.PHONY: up down psql new_migration migrateup migratedown sqlc mock test cover cover-check server compose-up compose-down compose-logs swagger

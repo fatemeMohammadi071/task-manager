@@ -17,6 +17,12 @@ import (
 	"github.com/fatemeMohammadi071/task-manager/util"
 )
 
+// @title			Task Manager API
+// @version		1.0
+// @description	A small REST service for managing to-do tasks (CRUD, pagination, filtering).
+// @host			localhost:8080
+// @BasePath		/
+// @schemes		http
 func main() {
 	config, err := util.LoadConfig(".")
 	if err != nil {
