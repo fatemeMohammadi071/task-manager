@@ -431,3 +431,265 @@ func TestListTasksAPI(t *testing.T) {
 		})
 	}
 }
+
+// doRequest sends a request to the server and returns the recorder.
+func doRequest(t *testing.T, server *Server, method, url string, body gin.H) *httptest.ResponseRecorder {
+	t.Helper()
+
+	var reader io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		require.NoError(t, err)
+		reader = bytes.NewReader(data)
+	}
+
+	req, err := http.NewRequest(method, url, reader)
+	require.NoError(t, err)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, req)
+	return recorder
+}
+
+// ---------- PATCH /api/v1/tasks/:id ----------
+
+func TestUpdateTaskAPI(t *testing.T) {
+	task := randomTask()
+
+	done := db.TaskStatusDone
+	updatedStatus := task
+	updatedStatus.Status = done
+
+	newTitle := util.RandomTitle()
+	newDesc := util.RandomString(40)
+	newAssignee := util.RandomAssignee()
+	inProgress := db.TaskStatusInProgress
+	updatedAll := task
+	updatedAll.Title = newTitle
+	updatedAll.Description = newDesc
+	updatedAll.Status = inProgress
+	updatedAll.Assignee = &newAssignee
+
+	testCases := []struct {
+		name          string
+		id            string
+		body          gin.H
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name: "OKOnlyStatus",
+			id:   fmt.Sprint(task.ID),
+			body: gin.H{"status": "done"},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					UpdateTask(gomock.Any(), gomock.Eq(db.UpdateTaskParams{
+						ID:     task.ID,
+						Status: &done, // all other fields nil → unchanged
+					})).
+					Times(1).
+					Return(updatedStatus, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				requireBodyMatchTask(t, recorder.Body, updatedStatus)
+			},
+		},
+		{
+			name: "OKAllFields",
+			id:   fmt.Sprint(task.ID),
+			body: gin.H{
+				"title":       newTitle,
+				"description": newDesc,
+				"status":      "in_progress",
+				"assignee":    newAssignee,
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					UpdateTask(gomock.Any(), gomock.Eq(db.UpdateTaskParams{
+						ID:          task.ID,
+						Title:       &newTitle,
+						Description: &newDesc,
+						Status:      &inProgress,
+						Assignee:    &newAssignee,
+					})).
+					Times(1).
+					Return(updatedAll, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				requireBodyMatchTask(t, recorder.Body, updatedAll)
+			},
+		},
+		{
+			name: "NotFound",
+			id:   fmt.Sprint(task.ID),
+			body: gin.H{"status": "done"},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					UpdateTask(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Task{}, pgx.ErrNoRows)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusNotFound, recorder.Code)
+				requireErrorBody(t, recorder.Body, "task not found")
+			},
+		},
+		{
+			name: "InternalError",
+			id:   fmt.Sprint(task.ID),
+			body: gin.H{"status": "done"},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					UpdateTask(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Task{}, errors.New("connection refused"))
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				requireErrorBody(t, recorder.Body, "internal server error")
+			},
+		},
+		{
+			name: "InvalidID",
+			id:   "0",
+			body: gin.H{"status": "done"},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().UpdateTask(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				requireErrorBody(t, recorder.Body, "id must be a positive integer")
+			},
+		},
+		{
+			name: "EmptyBody",
+			id:   fmt.Sprint(task.ID),
+			body: gin.H{},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().UpdateTask(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				requireErrorBody(t, recorder.Body, "at least one field must be provided")
+			},
+		},
+		{
+			name: "InvalidStatus",
+			id:   fmt.Sprint(task.ID),
+			body: gin.H{"status": "blocked"},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().UpdateTask(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "EmptyTitle",
+			id:   fmt.Sprint(task.ID),
+			body: gin.H{"title": ""},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().UpdateTask(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := doRequest(t, server, http.MethodPatch, "/api/v1/tasks/"+tc.id, tc.body)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+// ---------- DELETE /api/v1/tasks/:id ----------
+
+func TestDeleteTaskAPI(t *testing.T) {
+	id := util.RandomInt(1, 1000)
+
+	testCases := []struct {
+		name          string
+		id            string
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name: "OK",
+			id:   fmt.Sprint(id),
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					DeleteTask(gomock.Any(), gomock.Eq(id)).
+					Times(1).
+					Return(int64(1), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusNoContent, recorder.Code)
+				require.Empty(t, recorder.Body.String())
+			},
+		},
+		{
+			name: "NotFound",
+			id:   fmt.Sprint(id),
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					DeleteTask(gomock.Any(), gomock.Eq(id)).
+					Times(1).
+					Return(int64(0), nil) // 0 rows affected → didn't exist
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusNotFound, recorder.Code)
+				requireErrorBody(t, recorder.Body, "task not found")
+			},
+		},
+		{
+			name: "InternalError",
+			id:   fmt.Sprint(id),
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					DeleteTask(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(0), errors.New("connection refused"))
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				requireErrorBody(t, recorder.Body, "internal server error")
+			},
+		},
+		{
+			name: "InvalidID",
+			id:   "abc",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().DeleteTask(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				requireErrorBody(t, recorder.Body, "id must be a positive integer")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := doRequest(t, server, http.MethodDelete, "/api/v1/tasks/"+tc.id, nil)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
