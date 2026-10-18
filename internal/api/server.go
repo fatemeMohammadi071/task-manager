@@ -32,7 +32,10 @@ func (server *Server) setupRouter() {
 
 	router.GET("/health", server.health)
 
-	// /api/v1/tasks routes are added in Steps 8–11
+		v1 := router.Group("/api/v1")
+	{
+		v1.POST("/tasks", server.createTask)
+	}
 
 	server.router = router
 }
