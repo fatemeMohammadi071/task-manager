@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:17-alpine
     container_name: task-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: secret
@@ -15,6 +16,40 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  migrate:
+    image: migrate/migrate:v4.18.1
+    container_name: task-migrate
+    volumes:
+      - ./internal/db/migration:/migrations:ro
+    command:
+      - "-path=/migrations"
+      - "-database=postgresql://root:secret@postgres:5432/task_manager?sslmode=disable"
+      - "up"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build: .
+    container_name: task-api
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      DB_SOURCE: postgresql://root:secret@postgres:5432/task_manager?sslmode=disable
+      HTTP_SERVER_ADDRESS: 0.0.0.0:8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
 volumes:
   pgdata:

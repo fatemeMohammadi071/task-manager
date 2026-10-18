@@ -43,4 +43,13 @@ cover-check: cover
 server:
 	go run ./cmd/server
 
-.PHONY: up down psql new_migration migrateup migratedown sqlc mock test cover cover-check server
+compose-up:
+	docker compose up -d --build
+
+compose-down:
+	docker compose down
+
+compose-logs:
+	docker compose logs -f api
+
+.PHONY: up down psql new_migration migrateup migratedown sqlc mock test cover cover-check server compose-up compose-down compose-logs
