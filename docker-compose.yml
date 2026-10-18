@@ -38,6 +38,7 @@ services:
       ENVIRONMENT: production
       DB_SOURCE: postgresql://root:secret@postgres:5432/task_manager?sslmode=disable
       HTTP_SERVER_ADDRESS: 0.0.0.0:8080
+      TRACING_ENDPOINT: jaeger:4318
     ports:
       - "8080:8080"
     depends_on:
@@ -45,6 +46,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      jaeger:
+        condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 10s
@@ -60,6 +63,12 @@ services:
       - "9090:9090"
     depends_on:
       - api
+  jaeger:
+    image: jaegertracing/jaeger:2.1.0
+    container_name: task-jaeger
+    ports:
+      - "16686:16686"   # web UI
+      - "4318:4318"     # OTLP over HTTP (receives spans)
 
 volumes:
   pgdata:

@@ -7,6 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	db "github.com/fatemeMohammadi071/task-manager/internal/db/sqlc"
 )
@@ -102,13 +104,6 @@ func (server *Server) getTask(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, task)
-}
-
-// internalError logs the real error and returns a generic message,
-// so DB details are never leaked to clients.
-func (server *Server) internalError(ctx *gin.Context, err error) {
-	log.Printf("internal error on %s %s: %v", ctx.Request.Method, ctx.FullPath(), err)
-	ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 }
 
 const (
@@ -290,4 +285,14 @@ func (server *Server) deleteTask(ctx *gin.Context) {
 
 	server.metrics.TasksCount.Dec()
 	ctx.Status(http.StatusNoContent)
+}
+
+func (server *Server) internalError(ctx *gin.Context, err error) {
+	span := trace.SpanFromContext(ctx.Request.Context())
+	span.RecordError(err)
+	span.SetStatus(codes.Error, "internal error")
+
+	log.Printf("internal error on %s %s (trace_id=%s): %v",
+		ctx.Request.Method, ctx.FullPath(), span.SpanContext().TraceID(), err)
+	ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 }

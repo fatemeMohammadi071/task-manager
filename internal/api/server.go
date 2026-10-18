@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 
 	db "github.com/fatemeMohammadi071/task-manager/internal/db/sqlc"
 	"github.com/fatemeMohammadi071/task-manager/internal/observability"
@@ -35,9 +36,18 @@ func NewServer(config util.Config, store db.Store, metrics *observability.Metric
 
 func (server *Server) setupRouter() {
 	router := gin.New()
+
+	// gin.Context falls back to Request.Context(), so the trace span (and client
+	// cancellation) reaches the DB layer when we pass ctx to the store.
+	router.ContextWithFallback = true
+
 	router.Use(
 		gin.LoggerWithConfig(gin.LoggerConfig{SkipPaths: []string{"/health", "/metrics"}}),
-		server.metrics.Middleware(), // BEFORE Recovery, so panics are counted as 500
+		otelgin.Middleware("task-manager", otelgin.WithFilter(func(r *http.Request) bool {
+			return r.URL.Path != "/health" && r.URL.Path != "/metrics"
+		})),
+		observability.TraceIDHeader(),
+		server.metrics.Middleware(),
 		gin.Recovery(),
 	)
 

@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -33,17 +34,23 @@ func main() {
 
 	// ctx is cancelled when we receive Ctrl+C (SIGINT) or `docker stop` (SIGTERM)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	shutdownTracer, err := observability.InitTracer(ctx, "task-manager", config.TracingEndpoint)
+	if err != nil {
+		log.Fatal("cannot init tracer: ", err)
+	}
 	defer stop()
 
-	pool, err := pgxpool.New(ctx, config.DBSource)
+	poolConfig, err := pgxpool.ParseConfig(config.DBSource)
+	if err != nil {
+		log.Fatal("cannot parse db config: ", err)
+	}
+	poolConfig.ConnConfig.Tracer = otelpgx.NewTracer() // one span per SQL query
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		log.Fatal("cannot create db pool: ", err)
 	}
 	defer pool.Close()
-
-	if err := pool.Ping(ctx); err != nil {
-		log.Fatal("cannot connect to db: ", err)
-	}
 
 	store := db.NewStore(pool)
 
@@ -58,7 +65,9 @@ func main() {
 	if config.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
+
 	server := api.NewServer(config, store, metrics)
+
 	httpServer := &http.Server{
 		Addr:              config.HTTPServerAddress,
 		Handler:           server.Router(),
@@ -79,6 +88,13 @@ func main() {
 	defer cancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		log.Println("forced shutdown: ", err)
+	}
+
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		log.Println("forced shutdown: ", err)
+	}
+	if err := shutdownTracer(shutdownCtx); err != nil {
+		log.Println("tracer shutdown: ", err)
 	}
 	log.Println("server stopped")
 }
