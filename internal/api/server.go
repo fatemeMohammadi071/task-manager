@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	db "github.com/fatemeMohammadi071/task-manager/internal/db/sqlc"
+	"github.com/fatemeMohammadi071/task-manager/internal/observability"
 	"github.com/fatemeMohammadi071/task-manager/util"
 
 	swaggerFiles "github.com/swaggo/files"
@@ -16,16 +17,17 @@ import (
 
 // Server serves HTTP requests for the task manager service.
 type Server struct {
-	config util.Config
-	store  db.Store
-	router *gin.Engine
+	config  util.Config
+	store   db.Store
+	metrics *observability.Metrics
+	router  *gin.Engine
 }
 
-// NewServer creates a new HTTP server and sets up routing.
-func NewServer(config util.Config, store db.Store) *Server {
+func NewServer(config util.Config, store db.Store, metrics *observability.Metrics) *Server {
 	server := &Server{
-		config: config,
-		store:  store,
+		config:  config,
+		store:   store,
+		metrics: metrics,
 	}
 	server.setupRouter()
 	return server
@@ -35,10 +37,12 @@ func (server *Server) setupRouter() {
 	router := gin.New()
 	router.Use(
 		gin.LoggerWithConfig(gin.LoggerConfig{SkipPaths: []string{"/health", "/metrics"}}),
+		server.metrics.Middleware(), // BEFORE Recovery, so panics are counted as 500
 		gin.Recovery(),
 	)
 
 	router.GET("/health", server.health)
+	router.GET("/metrics", gin.WrapH(server.metrics.Handler()))
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	v1 := router.Group("/api/v1")

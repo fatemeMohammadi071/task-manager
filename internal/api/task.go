@@ -55,6 +55,7 @@ func (server *Server) createTask(ctx *gin.Context) {
 		return
 	}
 
+	server.metrics.TasksCount.Inc()
 	ctx.JSON(http.StatusCreated, task)
 }
 
@@ -287,5 +288,6 @@ func (server *Server) deleteTask(ctx *gin.Context) {
 		return
 	}
 
+	server.metrics.TasksCount.Dec()
 	ctx.Status(http.StatusNoContent)
 }

@@ -10,10 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/fatemeMohammadi071/task-manager/internal/api"
 	db "github.com/fatemeMohammadi071/task-manager/internal/db/sqlc"
+	"github.com/fatemeMohammadi071/task-manager/internal/observability"
 	"github.com/fatemeMohammadi071/task-manager/util"
 )
 
@@ -44,8 +46,19 @@ func main() {
 	}
 
 	store := db.NewStore(pool)
-	server := api.NewServer(config, store)
 
+	metrics := observability.NewMetrics()
+	count, err := store.CountTasks(ctx, db.CountTasksParams{}) // no filters = all tasks
+
+	if err != nil {
+		log.Fatal("cannot count tasks: ", err)
+	}
+	metrics.TasksCount.Set(float64(count))
+
+	if config.Environment == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	server := api.NewServer(config, store, metrics)
 	httpServer := &http.Server{
 		Addr:              config.HTTPServerAddress,
 		Handler:           server.Router(),
