@@ -1,5 +1,8 @@
 DB_URL=postgresql://root:secret@localhost:5432/task_manager?sslmode=disable
 
+# all packages except generated mocks, comma-separated (for -coverpkg)
+COVER_PKGS=$(shell go list ./... | grep -v /mock | paste -sd, -)
+
 up:
 	docker compose up -d postgres
 
@@ -25,9 +28,19 @@ mock:
 	mockgen -package mockdb -destination internal/db/mock/store.go $(shell go list -m)/internal/db/sqlc Store
 
 test:
-	go test -v -cover ./...
+	go test -v -race -cover ./...
+
+cover:
+	go test -race -coverpkg=$(COVER_PKGS) -coverprofile=coverage.out ./...
+	go tool cover -func=coverage.out | tail -1
+	go tool cover -html=coverage.out -o coverage.html
+
+cover-check: cover
+	@total=$$(go tool cover -func=coverage.out | tail -1 | awk '{print $$3}' | tr -d '%'); \
+	echo "Total coverage: $$total% (minimum 70%)"; \
+	awk -v t=$$total 'BEGIN { if (t < 70) { print "FAIL: coverage below 70%"; exit 1 } else { print "OK" } }'
 
 server:
 	go run ./cmd/server
 
-.PHONY: up down psql new_migration migrateup migratedown sqlc mock test server
+.PHONY: up down psql new_migration migrateup migratedown sqlc mock test cover cover-check server
