@@ -32,8 +32,7 @@ func TestSwaggerUI(t *testing.T) {
 	server := newTestServer(t, mockdb.NewMockStore(ctrl))
 
 	recorder := httptest.NewRecorder()
-	req, err := http.NewRequest(http.MethodGet, "/swagger/doc.json", nil)
-	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodGet, "/swagger/doc.json", nil)
 
 	server.Router().ServeHTTP(recorder, req)
 
