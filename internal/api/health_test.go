@@ -21,7 +21,7 @@ func TestHealth(t *testing.T) {
 	req, err := http.NewRequest(http.MethodGet, "/health", nil)
 	require.NoError(t, err)
 
-	server.router.ServeHTTP(recorder, req)
+	server.Router().ServeHTTP(recorder, req)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.JSONEq(t, `{"status":"ok"}`, recorder.Body.String())
