@@ -54,7 +54,7 @@ type taskIDRequest struct {
 func (server *Server) getTask(ctx *gin.Context) {
 	var req taskIDRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "id must be a positive integer"})
 		return
 	}
 
